@@ -1,3 +1,4 @@
+import os
 import cv2
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -8,13 +9,20 @@ import math
 
 # PyAutoGUI-Sicherheitsnetz deaktivieren
 pyautogui.FAILSAFE = False
+# Verzögerungen auf Null setzen für absolut flüssiges Zeichnen in Paint
+pyautogui.PAUSE = 0
+pyautogui.MINIMUM_DURATION = 0
 
-# Globale Variablen für den asynchronen Daten-Austausch (Unterstützt jetzt beide Hände)
+# Bildschirmgröße für die Maussteuerung ermitteln
+screen_width, screen_height = pyautogui.size()
+
+# Globale Variablen für den asynchronen Daten-Austausch (Unterstützt beide Hände)
 latest_hands_data = []
 latest_handedness_data = []
 
 # Status-Variablen für das System
-is_listening = False            # Der globale Modus (True = aktiv, False = stumm)
+is_listening = False            # Der globale Aktivierungsmodus (True = aktiv, False = stumm)
+mouse_mode_active = False       # Der Zeichen/Mausmodus (True = aktiv, False = Normaler Modus)
 
 # Sperren (Debounce), um Mehrfachauslösungen bei gehaltenem Pinch zu verhindern
 toggle_lock = False
@@ -26,13 +34,12 @@ right_index_triggered = False
 right_middle_triggered = False
 right_ring_triggered = False
 
+# Status für das Halten der linken Maustaste im Zeichenmodus
+mouse_is_down = False
+
 # Mathematische Hilfsfunktion: Berechnet den Abstand im 3D-Raum
 def get_distance(p1, p2):
     return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
-
-# Dummy-Funktion für den Zeichenmodus / Mausmodus (Linke Hand, Ringfinger)
-def toggle_mouse_drawing_mode():
-    print("[Maus-Modus] Geste erkannt! (Hier wird später der Mausmodus aktiviert/deaktiviert)")
 
 # ==============================================================================
 # MEDIAPIPE CALLBACK FUNKTION (Verarbeitet mehrere Hände parallel)
@@ -47,13 +54,15 @@ def print_result(result: vision.HandLandmarkerResult, output_image: mp.Image, ti
         latest_handedness_data = []
 
 # ==============================================================================
-# MEDIAPIPE INITIATION (num_hands=2 für paralleles Tracking)
+# MEDIAPIPE INITIATION (Jetzt dynamisch und fehlersicher im Skript-Ordner)
 # ==============================================================================
-model_path = r'C:\Users\schon\PenColorTracking\ObjectTracking\hand_landmarker.task'
+script_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(script_dir, "hand_landmarker.task")
+
 base_options = python.BaseOptions(model_asset_path=model_path)
 options = vision.HandLandmarkerOptions(
     base_options=base_options,
-    num_hands=2,                                  # Erkennt nun linke und rechte Hand gleichzeitig
+    num_hands=2,                                  # Erkennt linke und rechte Hand parallel
     running_mode=vision.RunningMode.LIVE_STREAM,
     result_callback=print_result
 )
@@ -63,7 +72,7 @@ options = vision.HandLandmarkerOptions(
 # ==============================================================================
 with vision.HandLandmarker.create_from_options(options) as detector:
     cap = cv2.VideoCapture(0)
-    print("Gesten-Steuerung aktiv. Standardmäßig STUMM.")
+    print("Multi-Shortcut & Mouse Manager gestartet. Standardmäßig STUMM.")
 
     while cap.isOpened():
         success, frame = cap.read()
@@ -80,8 +89,8 @@ with vision.HandLandmarker.create_from_options(options) as detector:
         current_hands = list(latest_hands_data)
         current_sides = list(latest_handedness_data)
 
-        # Flags, um zu prüfen, ob die Toggles/Pinches in dieser Runde noch aktiv sind
         any_hand_doing_toggle = False
+        right_index_pinch_active_this_frame = False
 
         # Schleife über alle im Bild erkannten Hände (bis zu 2)
         for hand, side in zip(current_hands, current_sides):
@@ -99,7 +108,8 @@ with vision.HandLandmarker.create_from_options(options) as detector:
             thumb_curled = abs(thumb_tip.x - hand[5].x) < 0.05
 
             # ==================================================================
-            # 1. MODUS-TOGGLE (NUR LINKE HAND: Daumen & Kleiner Finger gestreckt, andere zu)
+            # GLOBALER AKTIVIERUNGS-TOGGLE (NUR LINKE HAND)
+            # Daumen + Kleiner Finger gestreckt, Zeige-, Mittel-, Ringfinger zu
             # ==================================================================
             if side == "Left":
                 is_toggle_gesture = (not thumb_curled) and index_curled and middle_curled and ring_curled and (not pinky_curled)
@@ -107,78 +117,131 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                 if is_toggle_gesture:
                     any_hand_doing_toggle = True
                     if not toggle_lock:
-                        is_listening = not is_listening  # Wechselt den Modus (An/Aus)
+                        is_listening = not is_listening  # Hauptmodus umkehren (An/Aus)
                         toggle_lock = True
-                        print(f"[SYSTEM] Modus geändert! Aktiv: {is_listening}")
+                        print(f"[SYSTEM] Zuhör-Modus geändert! Aktiv: {is_listening}")
 
             # ==================================================================
-            # 2. SHORTCUTS AUSFÜHREN (NUR WENN IS_LISTENING = TRUE)
+            # GESTEN-VERARBEITUNG (NUR AKTIV WENN IS_LISTENING = TRUE)
             # ==================================================================
             if is_listening:
                 
-                # ------------------- LINKE HAND BEFEHLE -------------------
-                if side == "Left":
-                    # Pinch Daumen + Zeigefinger -> Win + Strg + Left Arrow
-                    left_index_dist = get_distance(thumb_tip, index_tip)
-                    if left_index_dist < 0.04:
-                        if not left_index_triggered:
-                            left_index_triggered = True
-                            pyautogui.hotkey('win', 'ctrl', 'left')
-                    else:
-                        left_index_triggered = False
+                # --------------------------------------------------------------
+                # MODUS A: ZEICHEN / MAUS-MODUS (DRAWING MODE)
+                # --------------------------------------------------------------
+                if mouse_mode_active:
+                    
+                    # LINKE HAND -> KEINE FUNKTION IMPLEMENTIERT
+                    if side == "Left":
+                        pass
 
-                    # Pinch Daumen + Mittelfinger -> Win + Strg + Right Arrow
-                    left_middle_dist = get_distance(thumb_tip, middle_tip)
-                    if left_middle_dist < 0.04:
-                        if not left_middle_triggered:
-                            left_middle_triggered = True
-                            pyautogui.hotkey('win', 'ctrl', 'right')
-                    else:
-                        left_middle_triggered = False
+                    # RECHTE HAND (Mausbewegung, Klicken & Zurückwechseln)
+                    elif side == "Right":
+                        # Geste 1: Pinch Daumen + Ringfinger -> ZURÜCK IN DEN NORMAL MODE
+                        right_ring_dist = get_distance(thumb_tip, ring_tip)
+                        if right_ring_dist < 0.04:
+                            if not right_ring_triggered:
+                                right_ring_triggered = True
+                                mouse_mode_active = False
+                                # Sicherstellen, dass die Maustaste beim Verlassen losgelassen wird
+                                if mouse_is_down:
+                                    pyautogui.mouseUp()
+                                    mouse_is_down = False
+                                print("[SYSTEM] Zeichen-Modus DEAKTIVIERT. Zurück im Normal Mode.")
+                            continue # Überspringe die restliche Maus-Logik in diesem Frame
+                        else:
+                            right_ring_triggered = False
 
-                    # Pinch Daumen + Ringfinger -> Zeichen/Maus-Modus (Dummy)
-                    left_ring_dist = get_distance(thumb_tip, ring_tip)
-                    if left_ring_dist < 0.04:
-                        if not left_ring_triggered:
-                            left_ring_triggered = True
-                            toggle_mouse_drawing_mode()
-                    else:
-                        left_ring_triggered = False
+                        # Geste 2: Pinch Daumen + Zeigefinger -> LINKE MAUSTASTE GEDRÜCKT HALTEN (ZEICHNEN)
+                        right_index_dist = get_distance(thumb_tip, index_tip)
+                        if right_index_dist < 0.04:
+                            right_index_pinch_active_this_frame = True
+                            if not mouse_is_down:
+                                pyautogui.mouseDown()
+                                mouse_is_down = True
+                                print("[MAUS] Zeichnen aktiv (Klick gehalten)...")
 
-                # ------------------- RECHTE HAND BEFEHLE -------------------
-                elif side == "Right":
-                    # Pinch Daumen + Zeigefinger -> Alt + F4
-                    right_index_dist = get_distance(thumb_tip, index_tip)
-                    if right_index_dist < 0.04:
-                        if not right_index_triggered:
-                            right_index_triggered = True
-                            pyautogui.hotkey('alt', 'f4')
-                    else:
-                        right_index_triggered = False
+                        # MAUSBEWEGUNG: Folgt der Spitze des rechten Zeigefingers
+                        mouse_x = int(index_tip.x * screen_width)
+                        mouse_y = int(index_tip.y * screen_height)
+                        pyautogui.moveTo(mouse_x, mouse_y)
 
-                    # Pinch Daumen + Mittelfinger -> Win + Tab
-                    right_middle_dist = get_distance(thumb_tip, middle_tip)
-                    if right_middle_dist < 0.04:
-                        if not right_middle_triggered:
-                            right_middle_triggered = True
-                            pyautogui.hotkey('win', 'tab')
-                    else:
-                        right_middle_triggered = False
+                # --------------------------------------------------------------
+                # MODUS B: NORMALER SHORTCUT-MODUS
+                # --------------------------------------------------------------
+                else:
+                    # LINKE HAND BEFEHLE
+                    if side == "Left":
+                        # Pinch Daumen + Zeigefinger -> Win + Strg + Left Arrow
+                        left_index_dist = get_distance(thumb_tip, index_tip)
+                        if left_index_dist < 0.04:
+                            if not left_index_triggered:
+                                left_index_triggered = True
+                                pyautogui.hotkey('win', 'ctrl', 'left')
+                        else:
+                            left_index_triggered = False
 
-                    # Pinch Daumen + Ringfinger -> Win + D
-                    right_ring_dist = get_distance(thumb_tip, ring_tip)
-                    if right_ring_dist < 0.04:
-                        if not right_ring_triggered:
-                            right_ring_triggered = True
-                            pyautogui.hotkey('win', 'd')
-                    else:
-                        right_ring_triggered = False
+                        # Pinch Daumen + Mittelfinger -> Win + Strg + Right Arrow
+                        left_middle_dist = get_distance(thumb_tip, middle_tip)
+                        if left_middle_dist < 0.04:
+                            if not left_middle_triggered:
+                                left_middle_triggered = True
+                                pyautogui.hotkey('win', 'ctrl', 'right')
+                        else:
+                            left_middle_triggered = False
 
-        # Wenn keine linke Hand mehr die Toggle-Geste macht, schalte die Sperre frei
+                        # Pinch Daumen + Ringfinger -> IN DEN ZEICHEN / MAUS-MODUS WECHSELN
+                        left_ring_dist = get_distance(thumb_tip, ring_tip)
+                        if left_ring_dist < 0.04:
+                            if not left_ring_triggered:
+                                left_ring_triggered = True
+                                mouse_mode_active = True
+                                print("[SYSTEM] Zeichen-Modus AKTIVIERT. Alle normalen Shortcuts blockiert.")
+                        else:
+                            left_ring_triggered = False
+
+                    # RECHTE HAND BEFEHLE
+                    elif side == "Right":
+                        # Pinch Daumen + Zeigefinger -> Alt + F4
+                        right_index_dist = get_distance(thumb_tip, index_tip)
+                        if right_index_dist < 0.04:
+                            if not right_index_triggered:
+                                right_index_triggered = True
+                                pyautogui.hotkey('alt', 'f4')
+                        else:
+                            right_index_triggered = False
+
+                        # Pinch Daumen + Mittelfinger -> Win + Tab
+                        right_middle_dist = get_distance(thumb_tip, middle_tip)
+                        if right_middle_dist < 0.04:
+                            if not right_middle_triggered:
+                                right_middle_triggered = True
+                                pyautogui.hotkey('win', 'tab')
+                        else:
+                            right_middle_triggered = False
+
+                        # Pinch Daumen + Ringfinger -> Win + D
+                        right_ring_dist = get_distance(thumb_tip, ring_tip)
+                        if right_ring_dist < 0.04:
+                            if not right_ring_triggered:
+                                right_ring_triggered = True
+                                pyautogui.hotkey('win', 'd')
+                        else:
+                            right_ring_triggered = False
+
+        # --- UNTERSTÜTZENDE SCHLEIFEN-LOGIK (Trigger & Loslassen zurücksetzen) ---
+        
+        # Falls im Zeichenmodus der Daumen-Zeigefinger-Pinch gelöst wurde -> Maustaste in Paint loslassen
+        if mouse_mode_active and not right_index_pinch_active_this_frame and mouse_is_down:
+            pyautogui.mouseUp()
+            mouse_is_down = False
+            print("[MAUS] Zeichnen beendet (Klick losgelassen).")
+
+        # Modus-Umschalt-Schutz entsperren, wenn Hand geöffnet wird
         if not any_hand_doing_toggle:
             toggle_lock = False
 
-        # Wenn das Programm im stummen Modus ist, setzen wir alle Befehls-Sperren zurück
+        # Wenn das Programm komplett stumm geschaltet wird, alle Bedingungen bereinigen
         if not is_listening:
             left_index_triggered = False
             left_middle_triggered = False
@@ -186,12 +249,20 @@ with vision.HandLandmarker.create_from_options(options) as detector:
             right_index_triggered = False
             right_middle_triggered = False
             right_ring_triggered = False
+            if mouse_is_down:
+                pyautogui.mouseUp()
+                mouse_is_down = False
 
-        # Visuelles Feedback auf dem Kamerabild platzieren
-        if is_listening:
-            cv2.putText(frame, "MODUS: ZUHOEREN (Gesten aktiv)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        else:
+        # --- TEXT-FEEDBACK AUF DEM MONITOR ---
+        if not is_listening:
             cv2.putText(frame, "MODUS: STUMM (Gesten gesperrt)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        else:
+            if mouse_mode_active:
+                cv2.putText(frame, "MODUS: ZEICHNEN / MAUS (Aktiv)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+                if mouse_is_down:
+                    cv2.putText(frame, "MAUS: ZEICHNEN AKTIV", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+            else:
+                cv2.putText(frame, "MODUS: NORMAL (Shortcuts Aktiv)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
         # Monitor-Fenster anzeigen
         cv2.imshow("Aktivierungs-Shortcut Manager", frame)

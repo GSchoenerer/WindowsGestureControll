@@ -22,7 +22,7 @@ Normal Mode:
         
         - Pinch Indexfinger and thumb execute short cut: win + strg + left arrow
         - Pinch Middlefinger and thumb execute short cut: win + strg + right arrow
-        - Pinch Ringfinger and thumb activate / deactivate Mouse/drawing mode (not yet implemented can be ignored if needed for clarity add dummy function)
+        - Pinch Ringfinger and thumb activate / deactivate Mouse/drawing mode (disables all normal mode commands)
         - Thumb and littlefinger stretched and all other fingers closed: switch the programm into a mode that acepts gesture commands if executed again stop acepting all other gestures but this one to reactivate
 
     Right Hand:
@@ -31,15 +31,15 @@ Normal Mode:
         - Pinch Middlefinger and thumb execute shortcut: win + tab
         - Pinch Ringfinger and thumb execute shortcut: win + d
 
-Drawing/Mouse Mode:
+Drawing/Mouse Mode(Mouse should always follow the top of the Right Indexfinger):
 
     Left Hand:
-        
         - No function implemented
-        - Possible functions: Pinch fingers for things linke erraser
+        
     
     Right Hand:
-        - No function implemented
+        - Pinch Ringfinger and thumb to switch back into normal mode (dissables all Drawing mode commands)
+        - Pinch Indexfinger and thumb to act like you are holding the Left mouse button down
 
 ### Hardware
 
