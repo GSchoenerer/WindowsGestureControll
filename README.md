@@ -38,8 +38,9 @@ Drawing/Mouse Mode(Mouse should always follow the top of the Right Indexfinger):
         
     
     Right Hand:
-        - Pinch Ringfinger and thumb to switch back into normal mode (dissables all Drawing mode commands)
+        - Pinch Pinkyfinger and thumb to switch back into normal mode (dissables all Drawing mode commands)
         - Pinch Indexfinger and thumb to act like you are holding the Left mouse button down
+        - Pinch Middlefinger and thumb to execute a single click
 
 ### Hardware
 

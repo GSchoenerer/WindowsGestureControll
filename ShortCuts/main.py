@@ -33,6 +33,7 @@ left_ring_triggered = False
 right_index_triggered = False
 right_middle_triggered = False
 right_ring_triggered = False
+right_pinky_triggered = False
 
 # Status für das Halten der linken Maustaste im Zeichenmodus
 mouse_is_down = False
@@ -131,15 +132,14 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                 # --------------------------------------------------------------
                 if mouse_mode_active:
                     
-                    # LINKE HAND -> KEINE FUNKTION IMPLEMENTIERT
-                    if side == "Left":
+                    # Beibehaltung deiner exakten Hand-Struktur aus der main.py
+                    if side == "Right":
                         pass
 
-                    # RECHTE HAND (Mausbewegung, Klicken & Zurückwechseln)
-                    elif side == "Right":
+                    elif side == "Left":
                         # Geste 1: Pinch Daumen + Ringfinger -> ZURÜCK IN DEN NORMAL MODE
-                        right_ring_dist = get_distance(thumb_tip, ring_tip)
-                        if right_ring_dist < 0.04:
+                        right_pinky_dist = get_distance(thumb_tip, pinky_tip)
+                        if right_pinky_dist < 0.04:
                             if not right_ring_triggered:
                                 right_ring_triggered = True
                                 mouse_mode_active = False
@@ -152,16 +152,26 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             right_ring_triggered = False
 
-                        # Geste 2: Pinch Daumen + Zeigefinger -> LINKE MAUSTASTE GEDRÜCKT HALTEN (ZEICHNEN)
+                        # Geste 2: Pinch Daumen + Mittelfinger -> EINFACHER MAUSKLICK (NEU hinzugefügt!)
+                        right_middle_dist = get_distance(thumb_tip, middle_tip)
+                        if right_middle_dist < 0.04:
+                            if not right_middle_triggered:
+                                right_middle_triggered = True
+                                pyautogui.click()
+                                print("[MAUS] Einfacher Klick ausgeführt.")
+                        else:
+                            right_middle_triggered = False
+
+                        # Geste 3: Pinch Daumen + Zeigefinger -> LINKE MAUSTASTE GEDRÜCKT HALTEN (ZEICHNEN)
                         right_index_dist = get_distance(thumb_tip, index_tip)
                         if right_index_dist < 0.04:
-                            right_index_pinch_active_this_frame = True
-                            if not mouse_is_down:
-                                pyautogui.mouseDown()
-                                mouse_is_down = True
-                                print("[MAUS] Zeichnen aktiv (Klick gehalten)...")
+                            right_index_pinch_acive_this_frame = True
+                            if not mouse_i.mouseDown()
+                                mouse_is_is_down:
+                                pyautogudown = True
+                                print("[MAUS] Zeichnen aktiv t(Klick gehalten)...")
 
-                        # MAUSBEWEGUNG: Folgt der Spitze des rechten Zeigefingers
+                        # MAUSBEWEGUNG: Folgt der Spitze des Zeigefingers
                         mouse_x = int(index_tip.x * screen_width)
                         mouse_y = int(index_tip.y * screen_height)
                         pyautogui.moveTo(mouse_x, mouse_y)
