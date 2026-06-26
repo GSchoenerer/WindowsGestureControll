@@ -16,6 +16,10 @@ pyautogui.MINIMUM_DURATION = 0
 # Bildschirmgröße für die Maussteuerung ermitteln
 screen_width, screen_height = pyautogui.size()
 
+# FINE-TUNING PARAMETER GEGEN DAS ZITTERN (JITTER)
+SMOOTHING_FACTOR = 0.20
+prev_mouse_x, prev_mouse_y = None, None
+
 # Globale Variablen für den asynchronen Daten-Austausch (Unterstützt beide Hände)
 latest_hands_data = []
 latest_handedness_data = []
@@ -55,7 +59,7 @@ def print_result(result: vision.HandLandmarkerResult, output_image: mp.Image, ti
         latest_handedness_data = []
 
 # ==============================================================================
-# MEDIAPIPE INITIATION (Jetzt dynamisch und fehlersicher im Skript-Ordner)
+# MEDIAPIPE INITIATION (Jetzt optimiert für stabilere Erkennung)
 # ==============================================================================
 script_dir = os.path.dirname(os.path.abspath(__file__))
 model_path = os.path.join(script_dir, "hand_landmarker.task")
@@ -65,6 +69,8 @@ options = vision.HandLandmarkerOptions(
     base_options=base_options,
     num_hands=2,                                  # Erkennt linke und rechte Hand parallel
     running_mode=vision.RunningMode.LIVE_STREAM,
+    min_hand_detection_confidence=0.6,            # Höhere Grundstabilität beim Finden der Hand
+    min_hand_presence_confidence=0.6,             # Verhindert, dass die Hand kurz "verschwindet"
     result_callback=print_result
 )
 
@@ -72,7 +78,12 @@ options = vision.HandLandmarkerOptions(
 # HAUPTSCHLEIFE
 # ==============================================================================
 with vision.HandLandmarker.create_from_options(options) as detector:
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)                     # Deine Kamera auf Index 1
+    
+    # PERFORMANCE-BOOST: Auflösung auf 640x480 drosseln für maximale FPS und weniger CPU-Last!
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    
     print("Multi-Shortcut & Mouse Manager gestartet. Standardmäßig STUMM.")
 
     while cap.isOpened():
@@ -93,7 +104,16 @@ with vision.HandLandmarker.create_from_options(options) as detector:
         any_hand_doing_toggle = False
         right_index_pinch_active_this_frame = False
 
-        # Schleife über alle im Bild erkannten Hände (bis zu 2)
+        # 1. DURCHGANG: Vorab prüfen, ob der Zeichen-Pinch aktiv ist
+        # Hier nutzen wir nun eine leicht erhöhte Toleranz, damit der Strich nicht abreißt!
+        for hand, side in zip(current_hands, current_sides):
+            if is_listening and mouse_mode_active and side == "Left":
+                thumb_tip = hand[4]
+                index_tip = hand[8]
+                if get_distance(thumb_tip, index_tip) < 0.04:
+                    right_index_pinch_active_this_frame = True
+
+        # 2. DURCHGANG: Eigentliche Gestenverarbeitung
         for hand, side in zip(current_hands, current_sides):
             thumb_tip = hand[4]
             index_tip = hand[8]
@@ -110,7 +130,6 @@ with vision.HandLandmarker.create_from_options(options) as detector:
 
             # ==================================================================
             # GLOBALER AKTIVIERUNGS-TOGGLE (NUR LINKE HAND)
-            # Daumen + Kleiner Finger gestreckt, Zeige-, Mittel-, Ringfinger zu
             # ==================================================================
             if side == "Left":
                 is_toggle_gesture = (not thumb_curled) and index_curled and middle_curled and ring_curled and (not pinky_curled)
@@ -118,7 +137,7 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                 if is_toggle_gesture:
                     any_hand_doing_toggle = True
                     if not toggle_lock:
-                        is_listening = not is_listening  # Hauptmodus umkehren (An/Aus)
+                        is_listening = not is_listening
                         toggle_lock = True
                         print(f"[SYSTEM] Zuhör-Modus geändert! Aktiv: {is_listening}")
 
@@ -132,27 +151,28 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                 # --------------------------------------------------------------
                 if mouse_mode_active:
                     
-                    # Beibehaltung deiner exakten Hand-Struktur aus der main.py
                     if side == "Right":
                         pass
 
                     elif side == "Left":
-                        # Geste 1: Pinch Daumen + Ringfinger -> ZURÜCK IN DEN NORMAL MODE
-                        right_pinky_dist = get_distance(thumb_tip, pinky_tip)
-                        if right_pinky_dist < 0.04:
-                            if not right_ring_triggered:
-                                right_ring_triggered = True
-                                mouse_mode_active = False
-                                # Sicherstellen, dass die Maustaste beim Verlassen losgelassen wird
-                                if mouse_is_down:
-                                    pyautogui.mouseUp()
-                                    mouse_is_down = False
-                                print("[SYSTEM] Zeichen-Modus DEAKTIVIERT. Zurück im Normal Mode.")
-                            continue # Überspringe die restliche Maus-Logik in diesem Frame
+                        # Geste 1: Pinch Daumen + KLEINER FINGER -> ZURÜCK IN DEN NORMAL MODE
+                        if not right_index_pinch_active_this_frame:
+                            right_pinky_dist = get_distance(thumb_tip, pinky_tip)
+                            if right_pinky_dist < 0.04:
+                                if not right_pinky_triggered:
+                                    right_pinky_triggered = True
+                                    mouse_mode_active = False
+                                    if mouse_is_down:
+                                        pyautogui.mouseUp()
+                                        mouse_is_down = False
+                                    print("[SYSTEM] Zeichen-Modus DEAKTIVIERT. Zurück im Normal Mode.")
+                                continue
+                            else:
+                                right_pinky_triggered = False
                         else:
-                            right_ring_triggered = False
+                            right_pinky_triggered = False
 
-                        # Geste 2: Pinch Daumen + Mittelfinger -> EINFACHER MAUSKLICK (NEU hinzugefügt!)
+                        # Geste 2: Pinch Daumen + Mittelfinger -> EINFACHER MAUSKLICK (Bleibt bei 0.04 für Präzision)
                         right_middle_dist = get_distance(thumb_tip, middle_tip)
                         if right_middle_dist < 0.04:
                             if not right_middle_triggered:
@@ -162,27 +182,38 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             right_middle_triggered = False
 
-                        # Geste 3: Pinch Daumen + Zeigefinger -> LINKE MAUSTASTE GEDRÜCKT HALTEN (ZEICHNEN)
-                        right_index_dist = get_distance(thumb_tip, index_tip)
-                        if right_index_dist < 0.04:
-                            right_index_pinch_acive_this_frame = True
-                            if not mouse_i.mouseDown()
-                                mouse_is_is_down:
-                                pyautogudown = True
-                                print("[MAUS] Zeichnen aktiv t(Klick gehalten)...")
+                        # Zielkoordinaten berechnen
+                        target_x = int(index_tip.x * screen_width)
+                        target_y = int(index_tip.y * screen_height)
+                        
+                        if prev_mouse_x is None or prev_mouse_y is None:
+                            prev_mouse_x, prev_mouse_y = target_x, target_y
+                        
+                        # Glättung anwenden
+                        current_mouse_x = int(prev_mouse_x + (target_x - prev_mouse_x) * SMOOTHING_FACTOR)
+                        current_mouse_y = int(prev_mouse_y + (target_y - prev_mouse_y) * SMOOTHING_FACTOR)
+                        
+                        # MAUSBEWEGUNG / ZEICHNEN EXEKUTIEREN
+                        if right_index_pinch_active_this_frame:
+                            if not mouse_is_down:
+                                pyautogui.moveTo(current_mouse_x, current_mouse_y)
+                                pyautogui.mouseDown()
+                                mouse_is_down = True
+                                print("[MAUS] Zeichnen aktiv (Klick gehalten)...")
+                            else:
+                                pyautogui.dragTo(current_mouse_x, current_mouse_y, button='left')
+                        else:
+                            pyautogui.moveTo(current_mouse_x, current_mouse_y)
 
-                        # MAUSBEWEGUNG: Folgt der Spitze des Zeigefingers
-                        mouse_x = int(index_tip.x * screen_width)
-                        mouse_y = int(index_tip.y * screen_height)
-                        pyautogui.moveTo(mouse_x, mouse_y)
+                        prev_mouse_x, prev_mouse_y = current_mouse_x, current_mouse_y
 
                 # --------------------------------------------------------------
                 # MODUS B: NORMALER SHORTCUT-MODUS
                 # --------------------------------------------------------------
                 else:
-                    # LINKE HAND BEFEHLE
+                    prev_mouse_x, prev_mouse_y = None, None
+                    
                     if side == "Left":
-                        # Pinch Daumen + Zeigefinger -> Win + Strg + Left Arrow
                         left_index_dist = get_distance(thumb_tip, index_tip)
                         if left_index_dist < 0.04:
                             if not left_index_triggered:
@@ -191,7 +222,6 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             left_index_triggered = False
 
-                        # Pinch Daumen + Mittelfinger -> Win + Strg + Right Arrow
                         left_middle_dist = get_distance(thumb_tip, middle_tip)
                         if left_middle_dist < 0.04:
                             if not left_middle_triggered:
@@ -200,7 +230,6 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             left_middle_triggered = False
 
-                        # Pinch Daumen + Ringfinger -> IN DEN ZEICHEN / MAUS-MODUS WECHSELN
                         left_ring_dist = get_distance(thumb_tip, ring_tip)
                         if left_ring_dist < 0.04:
                             if not left_ring_triggered:
@@ -210,9 +239,7 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             left_ring_triggered = False
 
-                    # RECHTE HAND BEFEHLE
                     elif side == "Right":
-                        # Pinch Daumen + Zeigefinger -> Alt + F4
                         right_index_dist = get_distance(thumb_tip, index_tip)
                         if right_index_dist < 0.04:
                             if not right_index_triggered:
@@ -221,7 +248,6 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             right_index_triggered = False
 
-                        # Pinch Daumen + Mittelfinger -> Win + Tab
                         right_middle_dist = get_distance(thumb_tip, middle_tip)
                         if right_middle_dist < 0.04:
                             if not right_middle_triggered:
@@ -230,7 +256,6 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             right_middle_triggered = False
 
-                        # Pinch Daumen + Ringfinger -> Win + D
                         right_ring_dist = get_distance(thumb_tip, ring_tip)
                         if right_ring_dist < 0.04:
                             if not right_ring_triggered:
@@ -239,19 +264,15 @@ with vision.HandLandmarker.create_from_options(options) as detector:
                         else:
                             right_ring_triggered = False
 
-        # --- UNTERSTÜTZENDE SCHLEIFEN-LOGIK (Trigger & Loslassen zurücksetzen) ---
-        
-        # Falls im Zeichenmodus der Daumen-Zeigefinger-Pinch gelöst wurde -> Maustaste in Paint loslassen
+        # --- UNTERSTÜTZENDE SCHLEIFEN-LOGIK ---
         if mouse_mode_active and not right_index_pinch_active_this_frame and mouse_is_down:
             pyautogui.mouseUp()
             mouse_is_down = False
             print("[MAUS] Zeichnen beendet (Klick losgelassen).")
 
-        # Modus-Umschalt-Schutz entsperren, wenn Hand geöffnet wird
         if not any_hand_doing_toggle:
             toggle_lock = False
 
-        # Wenn das Programm komplett stumm geschaltet wird, alle Bedingungen bereinigen
         if not is_listening:
             left_index_triggered = False
             left_middle_triggered = False
@@ -259,6 +280,8 @@ with vision.HandLandmarker.create_from_options(options) as detector:
             right_index_triggered = False
             right_middle_triggered = False
             right_ring_triggered = False
+            right_pinky_triggered = False
+            prev_mouse_x, prev_mouse_y = None, None
             if mouse_is_down:
                 pyautogui.mouseUp()
                 mouse_is_down = False
@@ -274,7 +297,6 @@ with vision.HandLandmarker.create_from_options(options) as detector:
             else:
                 cv2.putText(frame, "MODUS: NORMAL (Shortcuts Aktiv)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-        # Monitor-Fenster anzeigen
         cv2.imshow("Aktivierungs-Shortcut Manager", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
 
