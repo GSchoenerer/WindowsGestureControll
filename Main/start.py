@@ -1,3 +1,4 @@
+import threading
 import customtkinter as ctk
 from main import HandTracker as HT
 
@@ -8,12 +9,22 @@ ctk.set_appearance_mode("Dark")
 class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
-
+        self.handTracker = None
         self.title("SetUp")
         self.geometry("450x300")
-
+        
         self.rowconfigure(5)
         self.columnconfigure(5)
+
+        def StartHandTracker(start : bool = True):
+            
+            if start:
+                self.handTracker = HT(smoothingFactor=self.smooth, cameraIndex=1, altF4Enabled=self.IsAltF4Enabled)
+                # self.handTracker.IsRunning = True
+                self.handTracker.start()
+            else:
+                self.handTracker.IsRunning = False
+                self.handTracker = None    
         def SetSmooth(valueSmooth):
             self.smooth = valueSmooth
             print(valueSmooth)
@@ -28,9 +39,9 @@ class MainWindow(ctk.CTk):
             self.smoothSlider.configure(state="disabled")
             self.stopButton.configure(state="normal")
             self.altF4CheckBox.configure(state="disabled")
-        
-            self.handTracker = HT(smoothingFactor=self.smooth, cameraIndex=1, altF4Enabled=self.IsAltF4Enabled)
-            self.handTracker.start()
+
+            self.trackingThread = threading.Thread(target=StartHandTracker, daemon=True)
+            self.trackingThread.start()
 
         def StopTracking():
             print("Stopped")
@@ -41,6 +52,7 @@ class MainWindow(ctk.CTk):
             self.startButton.configure(state="normal")
             self.altF4CheckBox.configure(state="normal")
             self.stopButton.configure(state="disabled")
+            StartHandTracker(False)
 
 
         def EnableAltF4():
@@ -70,15 +82,6 @@ class MainWindow(ctk.CTk):
         # Enable/Disable alt+f4
         self.altF4CheckBox = ctk.CTkCheckBox(master=self,text="Alt+F4 enabled",variable=self.IsAltF4EnabledCheckVar,onvalue=True,offvalue=False,command=EnableAltF4)
         self.altF4CheckBox.grid(row=3,column=0,pady=5,padx=5)
-
-
-
-
-
-
-
-
-
 
 
 

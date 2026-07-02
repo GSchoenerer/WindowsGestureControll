@@ -55,6 +55,8 @@ class HandTracker:
         # SetUp variables
         self.altF4_is_blocked = False
 
+        self.IsRunning : bool = True
+
     # Mathematische Hilfsfunktion: Berechnet den Abstand im 3D-Raum
     def get_distance(self, p1, p2):
         return math.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2 + (p1.z - p2.z)**2)
@@ -92,7 +94,7 @@ class HandTracker:
             
             print(f"Multi-Shortcut & Mouse Manager gestartet (Kamera {self.camera_index}). Standardmäßig STUMM.")
 
-            while cap.isOpened():
+            while cap.isOpened() and self.IsRunning:
                 success, frame = cap.read()
                 if not success: break
 
@@ -303,7 +305,6 @@ class HandTracker:
                         cv2.putText(frame, "MODUS: NORMAL (Shortcuts Aktiv)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
                 cv2.imshow("Aktivierungs-Shortcut Manager", frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'): break
 
             cap.release()
             cv2.destroyAllWindows()
