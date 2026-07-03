@@ -8,7 +8,7 @@ import time
 import math
 
 class HandTracker:
-    def __init__(self,smoothingFactor=0.2,cameraIndex=1,altF4Enabled=True):
+    def __init__(self,smoothingFactor=0.2,cameraIndex=0,altF4Enabled=True):
         """
         Initialisiert den HandTracker.
         :param camera_index: Der Index der zu verwendenden Kamera (Standard: 1)
@@ -53,8 +53,6 @@ class HandTracker:
         self.mouse_is_down = False
 
         # SetUp variables
-        self.altF4_is_blocked = False
-
         self.IsRunning : bool = True
 
     # Mathematische Hilfsfunktion: Berechnet den Abstand im 3D-Raum
@@ -305,6 +303,8 @@ class HandTracker:
                         cv2.putText(frame, "MODUS: NORMAL (Shortcuts Aktiv)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
                 cv2.imshow("Aktivierungs-Shortcut Manager", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    self.IsRunning = False
 
             cap.release()
             cv2.destroyAllWindows()
