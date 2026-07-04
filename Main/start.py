@@ -18,6 +18,7 @@ class MainWindow(ctk.CTk):
         self.buttonInactiveColorStartStop : str = "#3f4e5f"
         self.IsAltF4EnabledCheckVar = ctk.BooleanVar(value=True)
         self.IsAltF4Enabled : bool = True
+        self.ShowCameraWindowCheckVar = ctk.BooleanVar(value=True)
         self.cameraListNumbers : list[str] = []
         self.cameraListNames : list[str] = []
         self.cameraDictionarry : dict[str, str] = {}
@@ -41,7 +42,7 @@ class MainWindow(ctk.CTk):
 
         def StartHandTracker(start : bool = True):
             if start:
-                self.handTracker = HT(smoothingFactor=self.smooth, cameraIndex=self.selectedCamera, altF4Enabled=self.IsAltF4Enabled)
+                self.handTracker = HT(smoothingFactor=self.smooth, cameraIndex=self.selectedCamera, altF4Enabled=self.IsAltF4Enabled,showCameraWindow=self.ShowCameraWindowCheckVar.get())
                 # self.handTracker.IsRunning = True
                 self.handTracker.start()
             else:
@@ -117,6 +118,10 @@ class MainWindow(ctk.CTk):
         # Enable/Disable alt+f4
         self.altF4CheckBox = ctk.CTkCheckBox(master=self,text="Alt+F4 disabled",variable=self.IsAltF4EnabledCheckVar,onvalue=True,offvalue=False,command=EnableAltF4)
         self.altF4CheckBox.grid(row=3,column=0,pady=5,padx=5)
+
+        # Show Camera Window
+        self.showCameraWindowCheckBox = ctk.CTkCheckBox(master=self,text="Show Camera Window",variable=self.ShowCameraWindowCheckVar,onvalue=True,offvalue=False)
+        self.showCameraWindowCheckBox.grid(row=5,column=0,pady=5,padx=5)
 
         # Camera selector
         self.cameraSelect = ctk.CTkComboBox(master=self,values=list(self.cameraDictionarry.keys()),variable=self.selectedCameraName,command=TranslateCameraName)

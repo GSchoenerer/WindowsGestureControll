@@ -8,7 +8,7 @@ import time
 import math
 
 class HandTracker:
-    def __init__(self,smoothingFactor=0.2,cameraIndex=0,altF4Enabled=True):
+    def __init__(self,smoothingFactor=0.2,cameraIndex=0,altF4Enabled=True,showCameraWindow=True):
         """
         Initialisiert den HandTracker.
         :param camera_index: Der Index der zu verwendenden Kamera (Standard: 1)
@@ -20,9 +20,10 @@ class HandTracker:
         pyautogui.MINIMUM_DURATION = 0
 
         # Parameter aus dem Konstruktor
-        self.camera_index = cameraIndex
-        self.smoothing_factor = smoothingFactor
-        self.altF4_is_blocked = altF4Enabled
+        self.camera_index : int = cameraIndex
+        self.smoothing_factor : float = smoothingFactor
+        self.altF4_is_blocked : bool = altF4Enabled
+        self.ShowCameraWindow : bool = showCameraWindow
 
         # Bildschirmgröße für die Maussteuerung ermitteln
         self.screen_width, self.screen_height = pyautogui.size()
@@ -54,6 +55,7 @@ class HandTracker:
 
         # SetUp variables
         self.IsRunning : bool = True
+        
 
     # Mathematische Hilfsfunktion: Berechnet den Abstand im 3D-Raum
     def get_distance(self, p1, p2):
@@ -302,7 +304,8 @@ class HandTracker:
                     else:
                         cv2.putText(frame, "MODUS: NORMAL (Shortcuts Aktiv)", (50, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-                cv2.imshow("Aktivierungs-Shortcut Manager", frame)
+                if self.ShowCameraWindow:
+                    cv2.imshow("Aktivierungs-Shortcut Manager", frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     self.IsRunning = False
 
